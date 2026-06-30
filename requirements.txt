@@ -1,0 +1,12 @@
+# Core libraries
+playwright==1.40.0
+google-generativeai==0.3.2
+
+# Additional dependencies that might be needed
+# (These are usually installed automatically with playwright, but included for clarity)
+requests==2.31.0
+urllib3==2.1.0
+
+# For better JSON handling and debugging (optional)
+prettytable==3.9.0
+colorama==0.4.6
