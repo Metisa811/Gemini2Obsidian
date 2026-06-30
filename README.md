@@ -74,7 +74,7 @@ For a complete step-by-step guide on how to set up and use **NeuralMind Scraper*
 
 **🎥 [NeuralMind Scraper - Complete Setup & Usage Guide](soon)**
 
-> *Replace `YOUR_TUTORIAL_LINK` with the actual YouTube video URL*
+
 
 ---
 
