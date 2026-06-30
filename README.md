@@ -103,4 +103,4 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 
 ---
 
-**Built with ❤️ for researchers, developers, and knowledge enthusiasts.**
+**Built for researchers, developers, and knowledge enthusiasts.**
