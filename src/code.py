@@ -6,7 +6,7 @@ from playwright.sync_api import sync_playwright
 from google import genai
 
 # ==========================================
-# 1. LOAD CONFIGURATION FROM CONFIG FILE
+# 1. Load Configuration
 # ==========================================
 try:
     import config
@@ -15,8 +15,8 @@ try:
     HTTP_PROXY = getattr(config, 'HTTP_PROXY', "")
     HTTPS_PROXY = getattr(config, 'HTTPS_PROXY', "")
 except ImportError:
-    print("⚠️ Error: config.py file not found!")
-    print("Please create a config.py file alongside this script.")
+    print("⚠️ Error: config.py not found!")
+    print("Please create config.py in the same directory.")
     exit()
 
 if USE_PROXY and HTTP_PROXY and HTTPS_PROXY:
@@ -26,10 +26,10 @@ if USE_PROXY and HTTP_PROXY and HTTPS_PROXY:
     os.environ["https_proxy"] = HTTPS_PROXY
     print("🛡️ Network: Proxy successfully applied.")
 else:
-    print("🌐 Network: Direct connection (no proxy).")
+    print("🌐 Network: Direct connection (No proxy).")
 
 # ==========================================
-# 2. PHASE 1: CHAT EXTRACTION ENGINE
+# 2. Phase 1: Chat Extraction Engine (Deep Delta Sync)
 # ==========================================
 def extract_chats():
     output_dir = "gemini_chats_json"
@@ -55,7 +55,7 @@ def extract_chats():
         page.goto("https://gemini.google.com/")
         page.wait_for_load_state("domcontentloaded")
         
-        print("🔍 Scanning chat list... (Open sidebar if closed)")
+        print("🔍 Scanning chat list... (Open sidebar if closed, waiting 10 seconds)")
         time.sleep(10)
         
         chat_links = page.evaluate("""
@@ -77,8 +77,8 @@ def extract_chats():
         for index, url in enumerate(chat_links):
             chat_id = url.split("/")[-1]
             file_path = os.path.join(output_dir, f"{chat_id}.json")
+            path_only = url.replace("https://gemini.google.com", "")
             
-            # Check previous message count for smart update (Delta Sync)
             old_msg_count = 0
             if os.path.exists(file_path):
                 try:
@@ -89,8 +89,32 @@ def extract_chats():
             
             print(f"\n⬇️ [{index+1}/{len(chat_links)}] Extracting chat: {url}")
             try:
-                page.goto(url)
+                # Human-like SPA Navigation: Click the sidebar link instead of hard reloading
+                clicked = page.evaluate(f"""
+                    () => {{
+                        let el = document.querySelector('a[href="{path_only}"]');
+                        if(el) {{ el.click(); return true; }}
+                        return false;
+                    }}
+                """)
+                
+                if clicked:
+                    print("   🖱️ Used SPA click for faster loading...")
+                    try:
+                        page.wait_for_function(f"window.location.href.includes('{chat_id}')", timeout=5000)
+                    except:
+                        pass
+                else:
+                    print("   🔄 Performing full page reload (Link not visible)...")
+                    page.goto(url)
+                
                 time.sleep(4)
+                
+                # Wait for messages to load dynamically
+                try:
+                    page.wait_for_selector('user-query, model-response, [class*="message-content"], [data-test-id="chat-message"], message-content', timeout=8000)
+                except:
+                    print("   ⏳ Taking longer to load or might be an empty chat...")
                 
                 for _ in range(5):
                     page.keyboard.press("PageUp")
@@ -125,9 +149,9 @@ def extract_chats():
                         } catch (e) {}
 
                         let data = [];
-                        let blocks = document.querySelectorAll('user-query, model-response, [class*="message-content"]');
+                        let blocks = document.querySelectorAll('user-query, model-response, [class*="message-content"], [data-test-id="chat-message"], message-content');
                         blocks.forEach(el => {
-                            let role = (el.tagName.toLowerCase().includes('user') || el.className.includes('user')) ? 'user' : 'model';
+                            let role = (el.tagName.toLowerCase().includes('user') || el.className.includes('user') || el.className.includes('query')) ? 'user' : 'model';
                             let text = el.innerText || el.textContent;
                             if(text.trim()) data.push({ role: role, text: text.trim() });
                         });
@@ -145,21 +169,21 @@ def extract_chats():
                         json.dump(chat_data, f, ensure_ascii=False, indent=4)
                     
                     if old_msg_count > 0:
-                        print(f"   🔄 Updated! (Old messages: {old_msg_count} -> New: {new_msg_count})")
+                        print(f"   🔄 Updated! (Old count: {old_msg_count} -> New count: {new_msg_count})")
                     else:
-                        print(f"   💾 New chat saved successfully.")
+                        print(f"   💾 New chat successfully saved.")
                 else:
-                    print(f"   ❌ No messages found!")
+                    print(f"   ❌ No messages found! (Google might have blocked the layout)")
 
             except Exception as e:
-                print(f"   ⚠️ Extraction error: {e}")
+                print(f"   ⚠️ Extraction Error: {e}")
                 continue
 
         browser.close()
         return True
 
 # ==========================================
-# 3. PHASE 2 & 3: CASCADING GRAPH (Auto-generate parent and child nodes)
+# 3. Phase 2 & 3: Hierarchical Graph Builder
 # ==========================================
 def extract_code_blocks(text, base_filename, output_codes_dir):
     code_pattern = re.compile(r'```([a-zA-Z0-9_\+\-]*)\s*\n(.*?)```', re.DOTALL)
@@ -184,8 +208,11 @@ def extract_code_blocks(text, base_filename, output_codes_dir):
             f.write(content)
             
         link = f"\n\n📎 **Code File:** [[{filename}]]\n\n"
-        replacement = f"```{match[0]}\n{match[1]}\n```\n{link}"
-        clean_text = clean_text.replace(f"```{match[0]}\n{match[1]}```", replacement, 1)
+        
+        # Safe replacement for code blocks
+        original_block = f"```{match[0]}\n{match[1]}```"
+        if original_block in clean_text:
+            clean_text = clean_text.replace(original_block, f"```{match[0]}\n{match[1]}\n```\n{link}", 1)
         
     return clean_text
 
@@ -200,7 +227,7 @@ def build_smart_graph_and_format():
     if not os.path.exists(input_dir): return
     
     files = [f for f in os.listdir(input_dir) if f.endswith('.json')]
-    print(f"\n🧠 [Phase 2 & 3] Building cascading graph (Chat -> Sub-Domain -> Domain)...")
+    print(f"\n🧠 [Phase 2 & 3] Building Cascading Graph (Chat -> Sub-Domain -> Domain)...")
     
     client = genai.Client(api_key=API_KEY)
     
@@ -219,10 +246,9 @@ def build_smart_graph_and_format():
         url = data.get('url', '')
         md_filepath = os.path.join(output_graph, f"{title}.md")
         
-        # Check to save time
         if os.path.exists(md_filepath):
             if os.path.getmtime(filepath) <= os.path.getmtime(md_filepath):
-                print(f"   ⏭️ Node '{title}' is up to date. Skipping...")
+                print(f"   ⏭️ Node '{title}' is up-to-date. Skipping...")
                 continue
         
         other_titles = [t for t in all_titles if t != title]
@@ -233,7 +259,6 @@ def build_smart_graph_and_format():
             role_name = "User" if msg.get("role") == "user" else "AI"
             raw_chat_string += f"[{role_name}]:\n{msg.get('text', '')}\n\n"
 
-        # Prompt with strict domain list control (History added)
         prompt = f"""
         You are an expert at formatting Markdown and LaTeX for Obsidian software.
         I will provide a raw scraped conversation between a User and an AI.
@@ -262,7 +287,7 @@ def build_smart_graph_and_format():
         
         # {title}
         
-        > 📂 **Sub-domain (Specialized Topic):** [[Sub-Domain]]
+        > 📂 **Sub-Domain (Specific Topic):** [[Sub-Domain]]
         > 🔗 **Related Chats:** [[Selected Title 1]] [[Selected Title 2]]
         
         ---
@@ -275,7 +300,6 @@ def build_smart_graph_and_format():
         
         for attempt in range(5):
             try:
-                # Using the requested model
                 response = client.models.generate_content(
                     model='gemini-3.1-flash-lite',
                     contents=prompt,
@@ -292,44 +316,41 @@ def build_smart_graph_and_format():
                     
                 ai_formatted_md = ai_formatted_md.strip()
                 
-                # --- Extract metadata and physically create parent and child nodes ---
+                # Metadata extraction and creating mother/child nodes physically
                 domain_match = re.search(r'domain:\s*([^\n\r]+)', ai_formatted_md)
                 sub_domain_match = re.search(r'sub_domain:\s*([^\n\r]+)', ai_formatted_md)
                 
                 domain_name = domain_match.group(1).strip().replace('[', '').replace(']', '') if domain_match else "Uncategorized"
                 sub_domain_name = sub_domain_match.group(1).strip().replace('[', '').replace(']', '') if sub_domain_match else "General"
                 
-                # Clean invalid characters for filenames
                 domain_name = re.sub(r'[\\/*?:"<>|]', "", domain_name)
                 sub_domain_name = re.sub(r'[\\/*?:"<>|]', "", sub_domain_name)
                 
-                # Fix: Create node files in NeuralMind_Graph folder physically
                 domain_file_path = os.path.join(output_graph, f"{domain_name}.md")
                 if not os.path.exists(domain_file_path):
                     with open(domain_file_path, 'w', encoding='utf-8') as df:
-                        df.write(f"---\ntype: domain\n---\n# {domain_name}\n\n> 🌌 **Mother Node (Main Branch)**\n")
+                        df.write(f"---\ntype: domain\n---\n# {domain_name}\n\n> 🌌 **Domain (Mother Node)**\n")
                         
                 sub_domain_file_path = os.path.join(output_graph, f"{sub_domain_name}.md")
                 if not os.path.exists(sub_domain_file_path):
                     with open(sub_domain_file_path, 'w', encoding='utf-8') as sdf:
-                        sdf.write(f"---\ntype: sub_domain\n---\n# {sub_domain_name}\n\n> 🌌 **Parent (Reference):** [[{domain_name}]]\n")
+                        sdf.write(f"---\ntype: sub_domain\n---\n# {sub_domain_name}\n\n> 🌌 **Mother Node:** [[{domain_name}]]\n")
 
-                # Extract code blocks and save chat markdown file
                 final_md_content = extract_code_blocks(ai_formatted_md, title, output_codes)
                 
                 with open(md_filepath, 'w', encoding='utf-8') as md_file:
                     md_file.write(final_md_content)
                     
-                print(f"   ✅ Node '{title}' connected to [{sub_domain_name} -> {domain_name}] successfully created.")
+                print(f"   ✅ Node '{title}' connected to [{sub_domain_name} -> {domain_name}] created successfully.")
                 break 
                 
             except Exception as e:
                 if '503' in str(e) or '429' in str(e):
                     wait_time = 15 + (attempt * 5)
-                    print(f"   ⏳ Server busy. Retrying ({attempt+1}/5) after {wait_time} seconds...")
+                    print(f"   ⏳ Server busy. Retrying ({attempt+1}/5) in {wait_time} seconds...")
                     time.sleep(wait_time)
                 else:
-                    print(f"   ⚠️ Model communication error (model may be unavailable): {e}")
+                    print(f"   ⚠️ API Communication Error: {e}")
                     break
         
         if index < len(files) - 1:
@@ -340,4 +361,4 @@ if __name__ == "__main__":
     print("🚀 Starting cascading graph construction (Hierarchy Rebuild)...")
     if extract_chats():
         build_smart_graph_and_format()
-        print("\n🎉 Your Obsidian graph has been successfully rebuilt and networked.")
+        print("\n🎉 Obsidian graph successfully rebuilt and networked.")
