@@ -72,7 +72,7 @@ python code.py
 
 For a complete step-by-step guide on how to set up and use **NeuralMind Scraper**, watch our comprehensive tutorial:
 
-**🎥 [NeuralMind Scraper - Complete Setup & Usage Guide](https://youtube.com/YOUR_TUTORIAL_LINK)**
+**🎥 [NeuralMind Scraper - Complete Setup & Usage Guide](soon)**
 
 > *Replace `YOUR_TUTORIAL_LINK` with the actual YouTube video URL*
 
