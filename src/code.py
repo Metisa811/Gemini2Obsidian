@@ -6,7 +6,7 @@ from playwright.sync_api import sync_playwright
 from google import genai
 
 # ==========================================
-# 1. Load settings from config file
+# 1. LOAD CONFIGURATION FROM CONFIG FILE
 # ==========================================
 try:
     import config
@@ -16,7 +16,7 @@ try:
     HTTPS_PROXY = getattr(config, 'HTTPS_PROXY', "")
 except ImportError:
     print("⚠️ Error: config.py file not found!")
-    print("Please create a config.py file next to this script.")
+    print("Please create a config.py file alongside this script.")
     exit()
 
 if USE_PROXY and HTTP_PROXY and HTTPS_PROXY:
@@ -29,7 +29,7 @@ else:
     print("🌐 Network: Direct connection (no proxy).")
 
 # ==========================================
-# 2. Phase 1: Chat extraction engine
+# 2. PHASE 1: CHAT EXTRACTION ENGINE
 # ==========================================
 def extract_chats():
     output_dir = "gemini_chats_json"
@@ -51,11 +51,11 @@ def extract_chats():
             return False
             
         page = context.new_page()
-        print("   [Phase 1] Accessing Gemini main panel...")
+        print("   [Phase 1] Navigating to Gemini main panel...")
         page.goto("https://gemini.google.com/")
         page.wait_for_load_state("domcontentloaded")
         
-        print("🔍 Scanning chat list... (If sidebar is closed, please open it)")
+        print("🔍 Scanning chat list... (Open sidebar if closed)")
         time.sleep(10)
         
         chat_links = page.evaluate("""
@@ -77,6 +77,15 @@ def extract_chats():
         for index, url in enumerate(chat_links):
             chat_id = url.split("/")[-1]
             file_path = os.path.join(output_dir, f"{chat_id}.json")
+            
+            # Check previous message count for smart update (Delta Sync)
+            old_msg_count = 0
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        old_msg_count = len(json.load(f).get("messages", []))
+                except:
+                    pass
             
             print(f"\n⬇️ [{index+1}/{len(chat_links)}] Extracting chat: {url}")
             try:
@@ -126,10 +135,19 @@ def extract_chats():
                     }
                 """)
                 
-                if len(chat_data["messages"]) > 0:
+                new_msg_count = len(chat_data["messages"])
+                
+                if new_msg_count == old_msg_count and old_msg_count > 0:
+                    print(f"   ⏭️ No new messages added (count: {new_msg_count}). Skipping...")
+                    continue
+                elif new_msg_count > 0:
                     with open(file_path, "w", encoding="utf-8") as f:
                         json.dump(chat_data, f, ensure_ascii=False, indent=4)
-                    print(f"   💾 Chat successfully extracted and saved.")
+                    
+                    if old_msg_count > 0:
+                        print(f"   🔄 Updated! (Old messages: {old_msg_count} -> New: {new_msg_count})")
+                    else:
+                        print(f"   💾 New chat saved successfully.")
                 else:
                     print(f"   ❌ No messages found!")
 
@@ -141,7 +159,7 @@ def extract_chats():
         return True
 
 # ==========================================
-# 3. Phases 2 & 3: Controlled hybrid graph
+# 3. PHASE 2 & 3: CASCADING GRAPH (Auto-generate parent and child nodes)
 # ==========================================
 def extract_code_blocks(text, base_filename, output_codes_dir):
     code_pattern = re.compile(r'```([a-zA-Z0-9_\+\-]*)\s*\n(.*?)```', re.DOTALL)
@@ -165,7 +183,7 @@ def extract_code_blocks(text, base_filename, output_codes_dir):
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
             
-        link = f"\n\n📎 **Code file:** [[{filename}]]\n\n"
+        link = f"\n\n📎 **Code File:** [[{filename}]]\n\n"
         replacement = f"```{match[0]}\n{match[1]}\n```\n{link}"
         clean_text = clean_text.replace(f"```{match[0]}\n{match[1]}```", replacement, 1)
         
@@ -182,7 +200,7 @@ def build_smart_graph_and_format():
     if not os.path.exists(input_dir): return
     
     files = [f for f in os.listdir(input_dir) if f.endswith('.json')]
-    print(f"\n🧠 [Phases 2 & 3] Rebuilding LaTeX, extracting code, and building unified concept graph...")
+    print(f"\n🧠 [Phase 2 & 3] Building cascading graph (Chat -> Sub-Domain -> Domain)...")
     
     client = genai.Client(api_key=API_KEY)
     
@@ -201,6 +219,12 @@ def build_smart_graph_and_format():
         url = data.get('url', '')
         md_filepath = os.path.join(output_graph, f"{title}.md")
         
+        # Check to save time
+        if os.path.exists(md_filepath):
+            if os.path.getmtime(filepath) <= os.path.getmtime(md_filepath):
+                print(f"   ⏭️ Node '{title}' is up to date. Skipping...")
+                continue
+        
         other_titles = [t for t in all_titles if t != title]
         other_titles_str = "\n".join([f"- {t}" for t in other_titles]) if other_titles else "No other chats available."
 
@@ -209,6 +233,7 @@ def build_smart_graph_and_format():
             role_name = "User" if msg.get("role") == "user" else "AI"
             raw_chat_string += f"[{role_name}]:\n{msg.get('text', '')}\n\n"
 
+        # Prompt with strict domain list control (History added)
         prompt = f"""
         You are an expert at formatting Markdown and LaTeX for Obsidian software.
         I will provide a raw scraped conversation between a User and an AI.
@@ -216,31 +241,28 @@ def build_smart_graph_and_format():
         YOUR TASK:
         1. Reconstruct the conversation perfectly. Use "🧑 **You:**" for the user and "🤖 **Model:**" for the AI.
         2. CONTEXTUAL MATH FIX: Convert ANY mathematical/physical formulas into PERFECT standard LaTeX (`$formula$` or `$$\nformula\n$$`).
-        3. STRICT CODE BLOCK RECONSTRUCTION: You MUST wrap all programming scripts/code (e.g., Python, C++) in standard Markdown fences (```python ... ```). Do NOT leave code as plain text.
+        3. STRICT CODE BLOCK RECONSTRUCTION: You MUST wrap all programming scripts/code in standard Markdown fences (```python ... ```).
         4. Remove annoying web UI artifacts.
         
-        5. HYBRID KNOWLEDGE GRAPH LINKING (STRICT RULES):
-           - [Mother Node]: Identify ONE Broad Domain. YOU MUST CHOOSE FROM THIS EXACT LIST ONLY: Physics, Mathematics, Computer_Science, Chemistry, Biology, Engineering, Languages, Uncategorized. DO NOT create any other domains like 'Theoretical_Physics'.
-           - [Direct Links]: Below is a list of OTHER existing chat titles. Select 1 to 3 titles that share a **DEEP, SPECIFIC scientific or conceptual bond** with this chat.
-             *BAD EXAMPLE*: Linking "Maxwell's Equations" to "Differential Equations" just because both have the word "Equations".
-             *GOOD EXAMPLE*: Linking "Magnetic Equations" to "Maxwell's Equations".
-             If no other chats share a STRONG bond, LEAVE IT EMPTY. Do not force connections.
+        5. HIERARCHICAL KNOWLEDGE GRAPH (STRICT RULES):
+           - [Mother Node / Domain]: Choose ONE broad domain from this EXACT list ONLY: Physics, Mathematics, Computer_Science, Chemistry, Biology, Engineering, Languages, History, Medicine, Philosophy, Arts, Uncategorized.
+           - [Sub-Domain]: Generate ONE specific sub-topic (e.g., Quantum_Mechanics, Achaemenid_Empire, Linear_Algebra). Use underscores for spaces.
+           - [Direct Links]: Select 1 to 3 OTHER existing chat titles that share a DEEP conceptual bond. If no strong bond exists, leave the related section EMPTY.
         
         AVAILABLE OTHER CHATS IN VAULT:
         {other_titles_str}
 
-        OUTPUT STRICTLY IN THIS EXACT FORMAT:
+        OUTPUT STRICTLY IN THIS EXACT FORMAT (No markdown backticks around the output):
         ---
         type: ai_conversation
         source: {url}
         domain: [Mother Node]
-        tags: 
-          - [Mother Node]
+        sub_domain: [Sub-Domain]
         ---
         
         # {title}
         
-        > 🌌 **General Topic:** [[Mother Node]]
+        > 📂 **Sub-domain (Specialized Topic):** [[Sub-Domain]]
         > 🔗 **Related Chats:** [[Selected Title 1]] [[Selected Title 2]]
         
         ---
@@ -253,6 +275,7 @@ def build_smart_graph_and_format():
         
         for attempt in range(5):
             try:
+                # Using the requested model
                 response = client.models.generate_content(
                     model='gemini-3.1-flash-lite',
                     contents=prompt,
@@ -269,12 +292,35 @@ def build_smart_graph_and_format():
                     
                 ai_formatted_md = ai_formatted_md.strip()
                 
+                # --- Extract metadata and physically create parent and child nodes ---
+                domain_match = re.search(r'domain:\s*([^\n\r]+)', ai_formatted_md)
+                sub_domain_match = re.search(r'sub_domain:\s*([^\n\r]+)', ai_formatted_md)
+                
+                domain_name = domain_match.group(1).strip().replace('[', '').replace(']', '') if domain_match else "Uncategorized"
+                sub_domain_name = sub_domain_match.group(1).strip().replace('[', '').replace(']', '') if sub_domain_match else "General"
+                
+                # Clean invalid characters for filenames
+                domain_name = re.sub(r'[\\/*?:"<>|]', "", domain_name)
+                sub_domain_name = re.sub(r'[\\/*?:"<>|]', "", sub_domain_name)
+                
+                # Fix: Create node files in NeuralMind_Graph folder physically
+                domain_file_path = os.path.join(output_graph, f"{domain_name}.md")
+                if not os.path.exists(domain_file_path):
+                    with open(domain_file_path, 'w', encoding='utf-8') as df:
+                        df.write(f"---\ntype: domain\n---\n# {domain_name}\n\n> 🌌 **Mother Node (Main Branch)**\n")
+                        
+                sub_domain_file_path = os.path.join(output_graph, f"{sub_domain_name}.md")
+                if not os.path.exists(sub_domain_file_path):
+                    with open(sub_domain_file_path, 'w', encoding='utf-8') as sdf:
+                        sdf.write(f"---\ntype: sub_domain\n---\n# {sub_domain_name}\n\n> 🌌 **Parent (Reference):** [[{domain_name}]]\n")
+
+                # Extract code blocks and save chat markdown file
                 final_md_content = extract_code_blocks(ai_formatted_md, title, output_codes)
                 
                 with open(md_filepath, 'w', encoding='utf-8') as md_file:
                     md_file.write(final_md_content)
                     
-                print(f"   ✅ Node '{title}' successfully rewritten and added to graph.")
+                print(f"   ✅ Node '{title}' connected to [{sub_domain_name} -> {domain_name}] successfully created.")
                 break 
                 
             except Exception as e:
@@ -283,7 +329,7 @@ def build_smart_graph_and_format():
                     print(f"   ⏳ Server busy. Retrying ({attempt+1}/5) after {wait_time} seconds...")
                     time.sleep(wait_time)
                 else:
-                    print(f"   ⚠️ Communication error processing file {title}: {e}")
+                    print(f"   ⚠️ Model communication error (model may be unavailable): {e}")
                     break
         
         if index < len(files) - 1:
@@ -291,7 +337,7 @@ def build_smart_graph_and_format():
 
 # ==========================================
 if __name__ == "__main__":
-    print("🚀 Starting extraction and knowledge graph building process (Full Rebuild)...")
+    print("🚀 Starting cascading graph construction (Hierarchy Rebuild)...")
     if extract_chats():
         build_smart_graph_and_format()
         print("\n🎉 Your Obsidian graph has been successfully rebuilt and networked.")
