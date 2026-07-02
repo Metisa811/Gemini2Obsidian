@@ -2,7 +2,7 @@
 
 **An advanced automation, extraction, and hierarchical knowledge graph construction pipeline for AI chat conversations (Google Gemini) — purpose-built for Obsidian.**
 
-**NeuralMind Scraper** is far more than a simple web scraper. It's a complete data pipeline that takes raw, unstructured web conversations and transforms them — using the power of natural language models — into clean, linked Markdown notes suitable for Obsidian.
+**NeuralMind Scraper** is far more than a simple web scraper. It's a complete data pipeline that takes raw, unstructured web conversations and transforms them — using the power of natural languag[...]
 
 ---
 
@@ -10,10 +10,10 @@
 
 The project tackles complex data engineering and web extraction challenges with robust, production-grade solutions:
 
-- **Surgical LaTeX Extraction (Deep LaTeX Restoration):** Bypasses the layered visual structure of the web (DOM) by injecting custom JavaScript to extract pure KaTeX source code. Ensures even the most nested formulas are preserved.
-- **Hierarchical Knowledge Graph Architecture:** Leverages an AI-based "Knowledge Architect." Each chat is intelligently parsed and mapped to a **parent node (Domain)** and a **sub-domain**, producing a browsable knowledge graph inside Obsidian.
-- **Automatic Code Block Isolation:** Automatically identifies programming code blocks, separates them from chat text, and saves them as standalone physical files (`.py`, `.tex`, `.m`) with internal links.
-- **Intelligent Session Management & Anti-Ban Protection:** Stores user sessions in `auth_state.json` for seamless automatic login. Utilizes Playwright's anti-bot headers and optional proxy tunneling to protect against rate limits.
+- **Surgical LaTeX Extraction (Deep LaTeX Restoration):** Bypasses the layered visual structure of the web (DOM) by injecting custom JavaScript to extract pure KaTeX source code. Ensures even the [...]
+- **Hierarchical Knowledge Graph Architecture:** Leverages an AI-based "Knowledge Architect." Each chat is intelligently parsed and mapped to a **parent node (Domain)** and a **sub-domain**, produ[...]
+- **Automatic Code Block Isolation:** Automatically identifies programming code blocks, separates them from chat text, and saves them as standalone physical files (`.py`, `.tex`, `.m`) with intern[...]
+- **Intelligent Session Management & Anti-Ban Protection:** Stores user sessions in `auth_state.json` for seamless automatic login. Utilizes Playwright's anti-bot headers and optional proxy tunnel[...]
 - **Exponential Backoff Retry System:** Intelligently handles API traffic issues (`429` and `503` errors) with an exponential backoff mechanism, ensuring stability and resilience.
 
 ---
@@ -23,13 +23,13 @@ The project tackles complex data engineering and web extraction challenges with 
 The project operates in three distinct but interconnected pipeline phases:
 
 ### 🌐 Phase 1: Raw Extraction Engine (Web Scraper)
-Using `Playwright`, the bot launches a browser, logs in with the stored session, and extracts chat links. An injected JavaScript script traverses the nested HTML tags to extract messages, stripping UI artifacts and converting KaTeX snippets back to LaTeX source.
+Using `Playwright`, the bot launches a browser, logs in with the stored session, and extracts chat links. An injected JavaScript script traverses the nested HTML tags to extract messages, strippin[...]
 
 ### 🧹 Phase 2: Primary Text Sanitization (Text Sanitizer)
 A Python script processes the JSON files, removing hidden web characters (zero-width spaces), redundant noise (e.g., "Gemini said"), and irregular line breaks using advanced Regex patterns.
 
 ### 🧠 Phase 3: AI-Powered Processing (AI Formatter & Graph Engine)
-The cleaned text is sent to an AI formatting engine which restructures the content, corrects LaTeX formulas, preserves code blocks, and injects YAML frontmatter metadata — including domain/sub-domain classifications and related-note links — to produce ready-to-use Obsidian notes.
+The cleaned text is sent to an AI formatting engine which restructures the content, corrects LaTeX formulas, preserves code blocks, and injects YAML frontmatter metadata — including domain/sub-d[...]
 
 ---
 
@@ -70,7 +70,7 @@ python code.py
 
 ## 🔁 Offline / Local Variant: src-ollama/
 
-This repository now includes an alternative fully-local pipeline at `src-ollama/` that replicates the same extraction and Obsidian graph-building flow but uses a local Ollama server (model `qwen2.5:7b`) for the AI formatting step instead of the hosted Gemini API.
+This repository now includes an alternative fully-local pipeline at `src-ollama/` that replicates the same extraction and Obsidian graph-building flow but uses a local Ollama server (model `qwen2.[...]
 
 Key differences
 - `src/` : Cloud (uses the Gemini API).
@@ -110,7 +110,7 @@ Setup & Run (src-ollama)
 Notes
 - The scraping portion is identical and still logs into Gemini web (Playwright + `auth_state.json`) to extract conversations.
 - The formatting/graph-building step runs locally via Ollama's REST API (no remote API costs, and the formatting step works offline once the model is pulled).
-- The offline variant is ideal if you want to avoid API keys or run the formatting privately, but expectations for output quality and speed should be set according to your local model (qwen2.5:7b is smaller than hosted SOTA models).
+- The offline variant is ideal if you want to avoid API keys or run the formatting privately, but expectations for output quality and speed should be set according to your local model (qwen2.5:7b[...]
 
 ---
 
@@ -118,7 +118,7 @@ Notes
 
 For a complete step-by-step guide on how to set up and use **NeuralMind Scraper**, watch our comprehensive tutorial:
 
-**🎥 [NeuralMind Scraper - Complete Setup & Usage Guide](https://youtu.be/kgay4cizOwI)**
+**🎥 [NeuralMind Scraper - Complete Setup & Usage Guide](https://youtu.be/kgay4cizOwI)** [![Watch on YouTube](images/thumbnail.png)](https://youtu.be/kgay4cizOwI "NeuralMind Scraper - Complete Setup & Usage Guide")
 
 
 
