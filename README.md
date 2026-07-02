@@ -118,10 +118,10 @@ Notes
 
 For a complete step-by-step guide on how to set up and use **NeuralMind Scraper**, watch our comprehensive tutorial:
 
-**🎥 [NeuralMind Scraper - Complete Setup & Usage Guide](https://youtu.be/kgay4cizOwI)** [![Watch on YouTube](images/thumbnail.png)](https://youtu.be/kgay4cizOwI "NeuralMind Scraper - Complete Setup & Usage Guide")
+**🎥 [NeuralMind Scraper - Complete Setup & Usage Guide](https://youtu.be/kgay4cizOwI)** [![Watch on YouTube](images/Image.png)](https://youtu.be/kgay4cizOwI "NeuralMind Scraper - Complete Setup & Usage Guide")
 
 <p align="center">
-  <img src="images/thumbnail.png" width="900">
+  <img src="images/Image.png" width="900">
 </p>
 
 ---
